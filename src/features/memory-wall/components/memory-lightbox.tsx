@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId } from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 import type { ClassmateRow } from "@/features/classmate-discovery/lib/types";
 import type { MemoryTagRow } from "@/features/memory-tagging/lib/types";
 import { MemoryTagField } from "@/features/memory-tagging/components/memory-tag-field";
@@ -26,39 +28,74 @@ type Props = {
 
 export function MemoryLightbox({ memory, onClose, engagement }: Props) {
   const labelId = useId();
-  const ref = useRef<HTMLDialogElement>(null);
 
+  // Lock body scroll while the lightbox is open
   useEffect(() => {
-    const el = ref.current;
-    if (!el) {
-      return;
-    }
-    if (memory) {
-      if (!el.open) {
-        el.showModal();
-      }
-    } else if (el.open) {
-      el.close();
-    }
+    if (!memory) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [memory]);
 
+  // Escape key closes the lightbox
+  useEffect(() => {
+    if (!memory) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [memory, onClose]);
+
+  // Nothing to show, or running on the server
+  if (!memory || typeof window === "undefined") return null;
+
   const showSocial =
-    memory?.status === "approved" &&
+    memory.status === "approved" &&
     engagement &&
     memory.school_id === engagement.schoolId;
 
-  return (
-    <dialog
-      ref={ref}
+  const batchLabel = (() => {
+    const batch = memory.batches?.name;
+    const year =
+      memory.batches?.graduation_year != null
+        ? ` (${memory.batches.graduation_year})`
+        : "";
+    const section = memory.sections?.name;
+    return [batch ? `${batch}${year}` : null, section]
+      .filter(Boolean)
+      .join(" · ");
+  })();
+
+  return createPortal(
+    /* ── Overlay ── */
+    <div
+      role="dialog"
+      aria-modal="true"
       aria-labelledby={labelId}
-      onCancel={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
-      className="w-[calc(100vw-1.5rem)] max-w-lg rounded-2xl border border-stone-200 bg-white p-0 text-stone-900 shadow-xl backdrop:bg-stone-900/50 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-50"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      onClick={onClose}
     >
-      {memory ? (
-        <div className="max-h-[90vh] overflow-y-auto">
+      {/* ── Modal panel — stop click propagation so overlay-click closes but panel-click does not ── */}
+      <div
+        className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-stone-950"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close memory"
+          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white transition hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        {/* Scrollable content */}
+        <div className="overflow-y-auto">
+          {/* Image — capped height so caption is always visible */}
           <SafeImage
             src={primaryImageUrl(memory.media_urls)}
             fallback={
@@ -72,46 +109,41 @@ export function MemoryLightbox({ memory, onClose, engagement }: Props) {
                 ? `Memory photo: ${memory.body.trim()}`
                 : "Memory photo"
             }
-            className="w-full rounded-none"
+            className="max-h-[55vh] w-full overflow-hidden rounded-none"
             imgClassName="object-contain"
           />
-          <div className="space-y-2 p-4 sm:p-5">
+
+          {/* Caption + social */}
+          <div className="space-y-3 p-5">
             <h2
               id={labelId}
               className="text-base font-semibold text-stone-900 dark:text-stone-50"
             >
               Memory
             </h2>
+
             {memory.body ? (
-              <p className="text-sm text-stone-700 dark:text-stone-300">
+              <p className="text-sm leading-relaxed text-stone-700 dark:text-stone-300">
                 {memory.body}
               </p>
             ) : null}
-            {(() => {
-              const batch = memory.batches?.name;
-              const year =
-                memory.batches?.graduation_year != null
-                  ? ` (${memory.batches.graduation_year})`
-                  : "";
-              const section = memory.sections?.name;
-              const tag = [batch ? `${batch}${year}` : null, section]
-                .filter(Boolean)
-                .join(" · ");
-              return tag ? (
-                <p className="text-xs text-stone-500 dark:text-stone-400">{tag}</p>
-              ) : null;
-            })()}
+
+            {batchLabel ? (
+              <p className="text-xs text-stone-400 dark:text-stone-500">
+                {batchLabel}
+              </p>
+            ) : null}
 
             {showSocial && engagement.tags.length > 0 ? (
-              <div className="pt-2">
-                <p className="text-xs font-medium text-stone-600 dark:text-stone-400">
+              <div className="pt-1">
+                <p className="text-xs font-medium text-stone-500 dark:text-stone-400">
                   Tagged
                 </p>
-                <ul className="mt-1 flex flex-wrap gap-1">
+                <ul className="mt-1.5 flex flex-wrap gap-1.5">
                   {engagement.tags.map((t) => (
                     <li
                       key={t.id}
-                      className="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-800 dark:bg-stone-800 dark:text-stone-200"
+                      className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-700 dark:bg-stone-800 dark:text-stone-200"
                     >
                       {t.users?.full_name?.trim() || "Alumni"}
                     </li>
@@ -135,19 +167,10 @@ export function MemoryLightbox({ memory, onClose, engagement }: Props) {
                 />
               </>
             ) : null}
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="min-h-10 rounded-xl bg-stone-900 px-4 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-white"
-              >
-                Close
-              </button>
-            </div>
           </div>
         </div>
-      ) : null}
-    </dialog>
+      </div>
+    </div>,
+    document.body,
   );
 }
