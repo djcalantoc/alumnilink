@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { GraduationCap } from "lucide-react";
 import { AlumniProfileForm } from "@/features/alumni-profile/components/alumni-profile-form";
 import type {
   AlumniProfileRow,
@@ -46,21 +47,67 @@ export default async function DashboardProfilePage() {
   const rows = profiles ?? [];
 
   if (rows.length === 0) {
+    // Fetch active public schools so we can give a direct join link
+    const { data: schools } = await supabase
+      .from("schools")
+      .select("id, name, slug")
+      .eq("status", "active")
+      .eq("visibility", "public")
+      .order("name")
+      .limit(8);
+
+    const joinableSchools = (schools ?? []) as { id: string; name: string; slug: string }[];
+
     return (
       <main className="mx-auto w-full max-w-lg flex-1 px-4 py-10 sm:px-6 sm:py-14">
         <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">
           Your profile
         </h1>
         <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">
-          You do not have an alumni profile yet. Join a school from its public
-          link to create one.
+          You do not have an alumni profile yet. Join your school below to
+          create one — a moderator will approve it before it appears in the
+          directory.
         </p>
-        <p className="mt-6">
+
+        {joinableSchools.length > 0 ? (
+          <div className="mt-6 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-stone-500 dark:text-stone-400">
+              Available schools
+            </p>
+            {joinableSchools.map((s) => (
+              <Link
+                key={s.id}
+                href={`/s/${s.slug}/join`}
+                className="flex items-center gap-3 rounded-2xl border border-violet-100 bg-white px-4 py-3 shadow-sm transition hover:border-violet-300 hover:shadow-md dark:border-stone-700 dark:bg-stone-900 dark:hover:border-violet-700"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-100 to-fuchsia-100 dark:from-violet-900/40 dark:to-fuchsia-900/30">
+                  <GraduationCap className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-stone-900 dark:text-stone-50">
+                    {s.name}
+                  </span>
+                  <span className="text-xs text-stone-400 dark:text-stone-500">
+                    Tap to join this school
+                  </span>
+                </span>
+                <span className="text-stone-300 dark:text-stone-600">→</span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">
+            No schools are available yet. Check back soon or use a direct
+            invite link from your school admin.
+          </p>
+        )}
+
+        <p className="mt-8">
           <Link
             href="/"
-            className="text-sm font-medium text-stone-900 underline-offset-4 hover:underline dark:text-stone-100"
+            className="text-sm font-medium text-stone-400 underline-offset-4 hover:text-violet-600 hover:underline dark:text-stone-500 dark:hover:text-violet-400"
           >
-            Back home
+            ← Back home
           </Link>
         </p>
       </main>
