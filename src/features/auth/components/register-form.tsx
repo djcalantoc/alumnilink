@@ -54,6 +54,7 @@ export function RegisterForm() {
       return;
     }
 
+    // Happy path: Supabase issued a session immediately (email confirmation is off).
     if (data.session && data.user) {
       await ensurePublicUserProfile(fullName);
       if (nextParam) {
@@ -69,8 +70,33 @@ export function RegisterForm() {
       return;
     }
 
+    // No session yet — either email confirmation is on, or the email already
+    // exists (Supabase returns the existing user silently to avoid enumeration).
+    // Try signing in with the submitted credentials to cover the "confirmation
+    // disabled" case and give a better message either way.
+    if (data.user) {
+      const { data: signInData, error: signInErr } =
+        await supabase.auth.signInWithPassword({ email, password });
+
+      if (!signInErr && signInData.session && signInData.user) {
+        await ensurePublicUserProfile(fullName);
+        if (nextParam) {
+          router.replace(nextParam);
+          router.refresh();
+          setPending(false);
+          return;
+        }
+        const landing = await resolveAuthLandingPath(supabase, signInData.user);
+        router.replace(landing);
+        router.refresh();
+        setPending(false);
+        return;
+      }
+    }
+
+    // Fallback: email confirmation is required — ask them to check inbox.
     setInfo(
-      "Check your inbox to confirm your email. After confirming, you can sign in.",
+      "Almost there! Check your inbox and click the confirmation link to activate your account.",
     );
     setPending(false);
   }
