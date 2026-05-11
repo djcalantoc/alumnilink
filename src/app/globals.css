@@ -98,6 +98,17 @@ body:has([data-dashboard-chrome]) > footer {
   display: none;
 }
 
+/* Auth pages: full-screen split layout — hide global site chrome. */
+body:has([data-auth-chrome]) > header {
+  display: none;
+}
+body:has([data-auth-chrome]) > footer {
+  display: none;
+}
+body:has([data-auth-chrome]) .alumni-surface {
+  background: none;
+}
+
 .material-symbols-outlined {
   /* Keep icon font even when a parent sets body/UI font via inline style (e.g. dashboard shell). */
   font-family: "Material Symbols Outlined", sans-serif !important;

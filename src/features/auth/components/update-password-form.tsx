@@ -3,16 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { AuthCard } from "@/components/auth/AuthCard";
+import { AuthErrorCard } from "@/components/auth/AuthErrorCard";
+import { AuthInput } from "@/components/auth/AuthInput";
+import { AuthSubmitButton } from "@/components/auth/AuthSubmitButton";
 import { resolveAuthLandingPath } from "@/features/auth/lib/resolve-redirect";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -62,55 +56,47 @@ export function UpdatePasswordForm() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>New password</CardTitle>
-        <CardDescription>
-          Choose a new password for your account.
-        </CardDescription>
-      </CardHeader>
-      <form onSubmit={onSubmit}>
-        <CardContent className="space-y-4">
-          {error ? (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          ) : null}
-          <label className="block text-sm font-medium text-stone-700 dark:text-stone-300">
-            Password
-            <Input
-              className="mt-1.5"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={8}
-            />
-          </label>
-          <label className="block text-sm font-medium text-stone-700 dark:text-stone-300">
-            Confirm password
-            <Input
-              className="mt-1.5"
-              name="confirmPassword"
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={8}
-            />
-          </label>
-        </CardContent>
-        <CardFooter>
-          <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-between">
-            <Button type="submit" disabled={pending}>
-              {pending ? "Saving…" : "Update password"}
-            </Button>
-            <Link
-              href="/login"
-              className="text-sm text-stone-600 underline-offset-4 hover:underline dark:text-stone-400"
-            >
-              Cancel
-            </Link>
-          </div>
-        </CardFooter>
+    <AuthCard
+      title="Choose a new password 🔐"
+      description="Pick a strong password for your AlumniLink account."
+    >
+      <form onSubmit={onSubmit} className="space-y-5">
+        {error && <AuthErrorCard message={error} />}
+
+        <AuthInput
+          label="New password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          placeholder="At least 8 characters"
+          required
+          minLength={8}
+        />
+
+        <AuthInput
+          label="Confirm password"
+          name="confirmPassword"
+          type="password"
+          autoComplete="new-password"
+          placeholder="Repeat your new password"
+          required
+          minLength={8}
+        />
+
+        <AuthSubmitButton loading={pending} loadingText="Saving…">
+          Update password
+        </AuthSubmitButton>
+
+        <p className="text-center text-sm text-stone-500 dark:text-stone-400">
+          Changed your mind?{" "}
+          <Link
+            href="/login"
+            className="font-semibold text-violet-600 underline-offset-4 hover:underline dark:text-violet-400"
+          >
+            Back to sign in
+          </Link>
+        </p>
       </form>
-    </Card>
+    </AuthCard>
   );
 }

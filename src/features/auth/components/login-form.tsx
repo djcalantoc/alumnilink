@@ -3,16 +3,10 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { AuthCard } from "@/components/auth/AuthCard";
+import { AuthErrorCard } from "@/components/auth/AuthErrorCard";
+import { AuthInput } from "@/components/auth/AuthInput";
+import { AuthSubmitButton } from "@/components/auth/AuthSubmitButton";
 import { ensurePublicUserProfile } from "@/features/auth/actions/ensure-user-profile";
 import { resolveAuthLandingPath } from "@/features/auth/lib/resolve-redirect";
 import { getSafeNextPath } from "@/features/auth/lib/safe-next-path";
@@ -89,56 +83,62 @@ export function LoginForm() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sign in</CardTitle>
-        <CardDescription>
-          Use the email and password for your AlumniLink account.
-        </CardDescription>
-      </CardHeader>
-      <form onSubmit={onSubmit}>
-        <CardContent className="space-y-4">
-          {searchParams.get("error") === "auth" ? (
-            <p className="text-sm text-red-600 dark:text-red-400">
-              That confirmation or reset link was invalid or expired. Try again.
-            </p>
-          ) : null}
-          {error ? (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          ) : null}
-          <label className="block text-sm font-medium text-stone-700 dark:text-stone-300">
-            Email
-            <Input
-              className="mt-1.5"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-            />
-          </label>
-          <label className="block text-sm font-medium text-stone-700 dark:text-stone-300">
-            Password
-            <Input
-              className="mt-1.5"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
-          </label>
-        </CardContent>
-        <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Button type="submit" disabled={pending}>
-            {pending ? "Signing in…" : "Sign in"}
-          </Button>
+    <AuthCard
+      title="Good to see you again 👋"
+      description="Sign in to your AlumniLink account to continue."
+    >
+      <form onSubmit={onSubmit} className="space-y-5">
+        {searchParams.get("error") === "auth" && (
+          <AuthErrorCard message="That confirmation or reset link was invalid or expired. Try again." />
+        )}
+        {error && <AuthErrorCard message={error} />}
+
+        <AuthInput
+          label="Email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          required
+        />
+
+        <div className="space-y-1">
+          <AuthInput
+            label="Password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            placeholder="••••••••"
+            required
+          />
+          <div className="flex justify-end">
+            <Link
+              href="/forgot-password"
+              className="text-xs font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
+            >
+              Forgot password?
+            </Link>
+          </div>
+        </div>
+
+        <AuthSubmitButton loading={pending} loadingText="Signing in…">
+          Sign in
+        </AuthSubmitButton>
+
+        <p className="text-center text-sm text-stone-500 dark:text-stone-400">
+          New here?{" "}
           <Link
-            href="/forgot-password"
-            className="text-sm text-stone-600 underline-offset-4 hover:underline dark:text-stone-400"
+            href={
+              nextParam
+                ? `/register?next=${encodeURIComponent(nextParam)}`
+                : "/register"
+            }
+            className="font-semibold text-violet-600 underline-offset-4 hover:underline dark:text-violet-400"
           >
-            Forgot password?
+            Join your batch
           </Link>
-        </CardFooter>
+        </p>
       </form>
-    </Card>
+    </AuthCard>
   );
 }

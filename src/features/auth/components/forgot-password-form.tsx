@@ -2,16 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { AuthCard } from "@/components/auth/AuthCard";
+import { AuthErrorCard, AuthInfoCard } from "@/components/auth/AuthErrorCard";
+import { AuthInput } from "@/components/auth/AuthInput";
+import { AuthSubmitButton } from "@/components/auth/AuthSubmitButton";
 import { getPublicAppUrl } from "@/lib/env";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -52,44 +46,36 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Reset password</CardTitle>
-        <CardDescription>
-          We will email you a link to choose a new password.
-        </CardDescription>
-      </CardHeader>
-      <form onSubmit={onSubmit}>
-        <CardContent className="space-y-4">
-          {error ? (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          ) : null}
-          {info ? (
-            <p className="text-sm text-stone-600 dark:text-stone-400">{info}</p>
-          ) : null}
-          <label className="block text-sm font-medium text-stone-700 dark:text-stone-300">
-            Email
-            <Input
-              className="mt-1.5"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-            />
-          </label>
-        </CardContent>
-        <CardFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <Button type="submit" disabled={pending}>
-            {pending ? "Sending…" : "Send reset link"}
-          </Button>
+    <AuthCard
+      title="Reset your password"
+      description="Enter your email and we'll send you a link to choose a new password."
+    >
+      <form onSubmit={onSubmit} className="space-y-5">
+        {error && <AuthErrorCard message={error} />}
+        {info && <AuthInfoCard message={info} />}
+
+        <AuthInput
+          label="Email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          required
+        />
+
+        <AuthSubmitButton loading={pending} loadingText="Sending…">
+          Send reset link
+        </AuthSubmitButton>
+
+        <p className="text-center text-sm text-stone-500 dark:text-stone-400">
           <Link
             href="/login"
-            className="text-sm text-stone-600 underline-offset-4 hover:underline dark:text-stone-400"
+            className="font-semibold text-violet-600 underline-offset-4 hover:underline dark:text-violet-400"
           >
-            Back to sign in
+            ← Back to sign in
           </Link>
-        </CardFooter>
+        </p>
       </form>
-    </Card>
+    </AuthCard>
   );
 }
