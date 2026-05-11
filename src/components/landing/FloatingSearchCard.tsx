@@ -1,38 +1,88 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import type { LandingBatch } from "@/features/landing/lib/queries";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import {
+  MOCK_LANDING_BATCHES,
+  isMockSchool,
+} from "@/features/landing/lib/landing-mocks";
 import type { LandingSchool } from "@/features/landing/lib/queries";
-import { isMockSchool } from "@/features/landing/lib/landing-mocks";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/cn";
+
+type Batch = {
+  id: string;
+  name: string;
+  graduation_year: number | null;
+  school_id: string;
+};
 
 type Props = {
   schools: LandingSchool[];
-  batches: LandingBatch[];
   className?: string;
 };
 
-export function FloatingSearchCard({ schools, batches, className }: Props) {
-  const [schoolId, setSchoolId] = useState(schools[0]?.id ?? "");
-  const [batchId, setBatchId] = useState("");
+export function FloatingSearchCard({ schools, className }: Props) {
+  const router = useRouter();
 
-  const school = schools.find((s) => s.id === schoolId);
-  const batchOptions = useMemo(
-    () => batches.filter((b) => b.school_id === schoolId),
-    [batches, schoolId],
+  const [selectedSchoolId, setSelectedSchoolId] = useState(
+    schools[0]?.id ?? "",
   );
+  const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [isLoadingBatches, setIsLoadingBatches] = useState(false);
 
-  const href = useMemo(() => {
-    if (!school) {
-      return "/register";
+  const school = schools.find((s) => s.id === selectedSchoolId);
+
+  // Fetch batches whenever the selected school changes
+  useEffect(() => {
+    setSelectedBatchId("");
+    setBatches([]);
+
+    if (!selectedSchoolId || !school) return;
+
+    // Mock schools use local mock data — no DB call needed
+    if (isMockSchool(school)) {
+      setBatches(
+        MOCK_LANDING_BATCHES.filter((b) => b.school_id === selectedSchoolId),
+      );
+      return;
     }
-    if (isMockSchool(school) || !school.slug) {
-      return "/register";
+
+    setIsLoadingBatches(true);
+    const supabase = createSupabaseBrowserClient();
+    supabase
+      .from("batches")
+      .select("id, name, graduation_year, school_id")
+      .eq("school_id", selectedSchoolId)
+      .order("graduation_year", { ascending: false })
+      .then(({ data }) => {
+        setBatches(data ?? []);
+        setIsLoadingBatches(false);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSchoolId]);
+
+  const canNavigate = Boolean(
+    school && selectedBatchId && !isMockSchool(school),
+  );
+  const isMock = school ? isMockSchool(school) : false;
+
+  function handleGo() {
+    if (isMock || !school?.slug) {
+      router.push("/register");
+      return;
     }
-    const q = batchId ? `?batch_id=${encodeURIComponent(batchId)}` : "";
-    return `/s/${school.slug}/join${q}`;
-  }, [school, batchId]);
+    if (!selectedBatchId) return;
+    router.push(
+      `/s/${school.slug}/join?batch_id=${encodeURIComponent(selectedBatchId)}`,
+    );
+  }
+
+  let batchPlaceholder = "Your graduating class";
+  if (isLoadingBatches) batchPlaceholder = "Loading batches…";
+  else if (!selectedSchoolId) batchPlaceholder = "Pick a school first";
+  else if (batches.length === 0) batchPlaceholder = "No batches available yet";
 
   return (
     <div
@@ -47,16 +97,14 @@ export function FloatingSearchCard({ schools, batches, className }: Props) {
       </p>
 
       <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:gap-5">
+        {/* School selector */}
         <label className="flex min-w-0 flex-1 flex-col gap-2">
           <span className="text-xs font-bold uppercase tracking-[0.12em] text-violet-600">
             Select School
           </span>
           <select
-            value={schoolId}
-            onChange={(e) => {
-              setSchoolId(e.target.value);
-              setBatchId("");
-            }}
+            value={selectedSchoolId}
+            onChange={(e) => setSelectedSchoolId(e.target.value)}
             className="min-h-14 w-full rounded-2xl border border-stone-200/90 bg-stone-50 px-4 text-base font-semibold text-stone-900 shadow-inner outline-none transition focus:border-violet-300 focus:ring-2 focus:ring-violet-400/40"
           >
             {schools.map((s) => (
@@ -67,22 +115,19 @@ export function FloatingSearchCard({ schools, batches, className }: Props) {
           </select>
         </label>
 
+        {/* Batch selector */}
         <label className="flex min-w-0 flex-1 flex-col gap-2">
           <span className="text-xs font-bold uppercase tracking-[0.12em] text-violet-600">
             Select Batch
           </span>
           <select
-            value={batchId}
-            onChange={(e) => setBatchId(e.target.value)}
-            disabled={batchOptions.length === 0}
+            value={selectedBatchId}
+            onChange={(e) => setSelectedBatchId(e.target.value)}
+            disabled={isLoadingBatches || batches.length === 0}
             className="min-h-14 w-full rounded-2xl border border-stone-200/90 bg-stone-50 px-4 text-base font-semibold text-stone-900 shadow-inner outline-none transition focus:border-violet-300 focus:ring-2 focus:ring-violet-400/40 disabled:cursor-not-allowed disabled:opacity-55"
           >
-            <option value="">
-              {batchOptions.length === 0
-                ? "No batches yet — pick a school"
-                : "Your graduating class"}
-            </option>
-            {batchOptions.map((b) => (
+            <option value="">{batchPlaceholder}</option>
+            {batches.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
                 {b.graduation_year != null ? ` · ${b.graduation_year}` : ""}
@@ -91,12 +136,25 @@ export function FloatingSearchCard({ schools, batches, className }: Props) {
           </select>
         </label>
 
-        <Link
-          href={href}
-          className="inline-flex min-h-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 px-8 text-base font-bold text-white shadow-lg shadow-fuchsia-500/35 transition duration-300 ease-out hover:scale-[1.02] hover:shadow-xl active:scale-[0.98] motion-reduce:transition-none lg:min-w-[220px]"
+        {/* CTA button */}
+        <button
+          type="button"
+          onClick={handleGo}
+          disabled={!isMock && !canNavigate}
+          className={cn(
+            "inline-flex min-h-14 shrink-0 items-center justify-center rounded-2xl",
+            "bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500",
+            "px-8 text-base font-bold text-white",
+            "shadow-lg shadow-fuchsia-500/35",
+            "transition duration-300 ease-out",
+            "hover:scale-[1.02] hover:shadow-xl active:scale-[0.98]",
+            "motion-reduce:transition-none",
+            "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-lg",
+            "lg:min-w-[220px]",
+          )}
         >
           See my classmates →
-        </Link>
+        </button>
       </div>
     </div>
   );

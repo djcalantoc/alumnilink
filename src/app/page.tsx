@@ -6,12 +6,10 @@ import { MemoryPreviewGrid } from "@/components/landing/MemoryPreviewGrid";
 import { StatsBar } from "@/components/landing/StatsBar";
 import { WhyJoinCards } from "@/components/landing/WhyJoinCards";
 import {
-  MOCK_LANDING_BATCHES,
   MOCK_LANDING_MEMORIES,
   MOCK_LANDING_SCHOOLS,
 } from "@/features/landing/lib/landing-mocks";
 import {
-  fetchLandingBatchesForSchools,
   fetchLandingMemoryPreviews,
   fetchLandingSchools,
   fetchLandingStats,
@@ -38,18 +36,6 @@ export default async function HomePage() {
     ? MOCK_LANDING_MEMORIES
     : memories.slice(0, 16);
 
-  const schoolIds = displaySchools.map((s) => s.id);
-  const { rows: liveBatches, error: batchErr } =
-    await fetchLandingBatchesForSchools(supabase, schoolIds);
-
-  const mockBatchesInUse = displaySchools.some((s) =>
-    s.id.startsWith("mock-school-"),
-  );
-  const displayBatches = [
-    ...(batchErr ? [] : liveBatches),
-    ...(mockBatchesInUse ? MOCK_LANDING_BATCHES : []),
-  ];
-
   return (
     <main className="w-full flex-1 overflow-x-hidden bg-[#faf8ff]">
       <div className="relative">
@@ -57,7 +43,7 @@ export default async function HomePage() {
 
         <div className="relative z-20 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="-mt-16 sm:-mt-20 md:-mt-24 lg:-mt-28">
-            <FloatingSearchCard schools={displaySchools} batches={displayBatches} />
+            <FloatingSearchCard schools={displaySchools} />
           </div>
         </div>
       </div>

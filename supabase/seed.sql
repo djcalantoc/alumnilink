@@ -39,7 +39,13 @@ begin
   );
 
   insert into public.batches (id, school_id, name, graduation_year)
-  values (batch_id, school_id, 'Class of 2015', 2015);
+  values
+    (batch_id,                                     school_id, 'Class of 2015', 2015),
+    ('c0000002-0000-4000-8000-000000000002'::uuid, school_id, 'Class of 2016', 2016),
+    ('c0000002-0000-4000-8000-000000000003'::uuid, school_id, 'Class of 2017', 2017),
+    ('c0000002-0000-4000-8000-000000000004'::uuid, school_id, 'Class of 2018', 2018),
+    ('c0000002-0000-4000-8000-000000000005'::uuid, school_id, 'Class of 2019', 2019),
+    ('c0000002-0000-4000-8000-000000000006'::uuid, school_id, 'Class of 2020', 2020);
 
   insert into public.sections (id, school_id, batch_id, name)
   values (section_id, school_id, batch_id, 'Section A');
