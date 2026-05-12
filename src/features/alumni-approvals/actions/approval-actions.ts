@@ -41,7 +41,7 @@ export async function approveAlumniProfile(
     return { ok: false, error: gate.message };
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("alumni_profiles")
     .update({
       status: "approved",
@@ -49,10 +49,18 @@ export async function approveAlumniProfile(
     })
     .eq("id", parsed.data.profile_id)
     .eq("school_id", parsed.data.school_id)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     return { ok: false, error: error.message };
+  }
+  if (!updated) {
+    return {
+      ok: false,
+      error: "Could not approve profile. It may have already been reviewed or you lack permission.",
+    };
   }
 
   const { data: schoolRow } = await supabase
@@ -97,7 +105,7 @@ export async function rejectAlumniProfile(
     return { ok: false, error: gate.message };
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("alumni_profiles")
     .update({
       status: "rejected",
@@ -105,10 +113,18 @@ export async function rejectAlumniProfile(
     })
     .eq("id", parsed.data.profile_id)
     .eq("school_id", parsed.data.school_id)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     return { ok: false, error: error.message };
+  }
+  if (!updated) {
+    return {
+      ok: false,
+      error: "Could not reject profile. It may have already been reviewed or you lack permission.",
+    };
   }
 
   const { data: schoolRow } = await supabase
