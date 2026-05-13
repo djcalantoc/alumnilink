@@ -13,18 +13,25 @@ import type { BatchRow } from "@/features/school-batch-sections/lib/queries";
 type Props = {
   batch: BatchRow;
   schoolId: string;
+  onDone?: () => void;
 };
 
-export function BatchRowEditor({ batch, schoolId }: Props) {
+export function BatchRowEditor({ batch, schoolId, onDone }: Props) {
   const [updateState, updateAction, updatePending] = useActionState(
-    async (_prev: BatchActionResult | null, formData: FormData) =>
-      updateBatch(formData),
+    async (_prev: BatchActionResult | null, formData: FormData) => {
+      const result = await updateBatch(formData);
+      if (result.ok) onDone?.();
+      return result;
+    },
     null,
   );
 
   const [deleteState, deleteAction, deletePending] = useActionState(
-    async (_prev: BatchActionResult | null, formData: FormData) =>
-      deleteBatch(formData),
+    async (_prev: BatchActionResult | null, formData: FormData) => {
+      const result = await deleteBatch(formData);
+      if (result.ok) onDone?.();
+      return result;
+    },
     null,
   );
 

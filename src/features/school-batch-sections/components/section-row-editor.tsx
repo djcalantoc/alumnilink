@@ -15,18 +15,25 @@ type Props = {
   section: SectionRow;
   schoolId: string;
   batches: BatchRow[];
+  onDone?: () => void;
 };
 
-export function SectionRowEditor({ section, schoolId, batches }: Props) {
+export function SectionRowEditor({ section, schoolId, batches, onDone }: Props) {
   const [updateState, updateAction, updatePending] = useActionState(
-    async (_prev: SectionActionResult | null, formData: FormData) =>
-      updateSection(formData),
+    async (_prev: SectionActionResult | null, formData: FormData) => {
+      const result = await updateSection(formData);
+      if (result.ok) onDone?.();
+      return result;
+    },
     null,
   );
 
   const [deleteState, deleteAction, deletePending] = useActionState(
-    async (_prev: SectionActionResult | null, formData: FormData) =>
-      deleteSection(formData),
+    async (_prev: SectionActionResult | null, formData: FormData) => {
+      const result = await deleteSection(formData);
+      if (result.ok) onDone?.();
+      return result;
+    },
     null,
   );
 
