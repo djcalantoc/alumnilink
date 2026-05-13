@@ -1,23 +1,31 @@
 import type { Metadata } from "next";
+import { requireSuperAdmin } from "@/features/super-admin-schools/lib/guard";
+import { UsersTable } from "@/features/super-admin/components/users-table";
+import { fetchPaginatedUsers } from "@/features/super-admin/lib/queries";
 import { PageHeader } from "@/components/layout/PageHeader";
 
-export const metadata: Metadata = {
-  title: "Users",
+export const metadata: Metadata = { title: "Users — Super Admin" };
+
+type Props = {
+  searchParams: Promise<{ search?: string; page?: string }>;
 };
 
-export default function AdminUsersPage() {
+export default async function AdminUsersPage({ searchParams }: Props) {
+  const { supabase } = await requireSuperAdmin();
+  const sp = await searchParams;
+
+  const data = await fetchPaginatedUsers(supabase, {
+    search: sp.search,
+    page: sp.page ? Number(sp.page) : 1,
+  });
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
       <PageHeader
         title="Users"
-        description="Search alumni registrations across schools."
+        description={`${data.totalCount.toLocaleString()} total registered users across all schools.`}
       />
-      <div className="rounded-2xl border border-white/80 bg-white/95 p-6 text-sm text-stone-600 shadow-lg shadow-stone-900/5 dark:border-stone-800 dark:bg-stone-950/95 dark:text-stone-400 dark:shadow-black/40">
-        <p>
-          Advanced directory search will mirror Supabase Auth + alumni profiles —
-          export CSV via dashboard meanwhile.
-        </p>
-      </div>
+      <UsersTable data={data} />
     </div>
   );
 }
