@@ -103,6 +103,7 @@ function RoleSidebarInner({
         return {
           main: [
             { href: `/school-admin${q}`, label: "Overview", icon: "dashboard", match: "exact" },
+            { href: `/school-admin/alumni${q}`, label: "Alumni Management", icon: "group" },
             { href: `/school-admin/alumni-approvals${q}`, label: "Alumni Approvals", icon: "verified_user" },
             { href: `/school-admin/batches${q}`, label: "Batches", icon: "calendar_month" },
             { href: `/school-admin/sections${q}`, label: "Sections", icon: "grid_view" },
