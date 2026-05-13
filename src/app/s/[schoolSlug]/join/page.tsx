@@ -1,27 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { GraduationCap, UserPlus } from "lucide-react";
-import { AlumniProfileForm } from "@/features/alumni-profile/components/alumni-profile-form";
-import type {
-  AlumniProfileRow,
-  BatchOption,
-  SectionOption,
-} from "@/features/alumni-profile/lib/types";
-import { getAuthUser } from "@/features/auth/lib/auth-helpers";
-import { getSafeNextPath } from "@/features/auth/lib/safe-next-path";
-import { AuthCard } from "@/components/auth/AuthCard";
+import { GraduationCap, LogIn, UserPlus } from "lucide-react";
 import { JoinBrandPanel } from "@/components/auth/JoinBrandPanel";
+import { JoinBatchPicker } from "@/features/school-join/components/join-batch-picker";
+import { JoinProfileForm } from "@/features/school-join/components/join-profile-form";
+import { getAuthUser } from "@/features/auth/lib/auth-helpers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type PageProps = {
   params: Promise<{ schoolSlug: string }>;
-  searchParams: Promise<{ batch_id?: string }>;
+  searchParams: Promise<{
+    batchId?: string;
+    sectionId?: string;
+  }>;
 };
 
-export async function generateMetadata({
-  params,
-}: PageProps): Promise<Metadata> {
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { schoolSlug } = await params;
   const supabase = await createSupabaseServerClient();
   const { data: school } = await supabase
@@ -30,61 +25,76 @@ export async function generateMetadata({
     .eq("slug", schoolSlug)
     .eq("status", "active")
     .maybeSingle();
-
-  if (!school?.name) {
-    return { title: "Join school" };
-  }
-  return { title: `Join ${school.name}` };
+  return { title: school?.name ? `Join ${school.name}` : "Join school" };
 }
 
-export default async function SchoolJoinPage({
-  params,
-  searchParams,
-}: PageProps) {
+export default async function SchoolJoinPage({ params, searchParams }: PageProps) {
   const { schoolSlug } = await params;
   const sp = await searchParams;
-  const prefillBatchId = sp.batch_id?.trim() || null;
+  const batchId = sp.batchId?.trim() || null;
+  const sectionId = sp.sectionId?.trim() || null;
+
   const supabase = await createSupabaseServerClient();
 
-  const { data: school, error: schoolErr } = await supabase
+  /* ── Fetch school ── */
+  const { data: school } = await supabase
     .from("schools")
     .select("id, name, slug, visibility, status, primary_color, cover_photo_url")
     .eq("slug", schoolSlug)
     .eq("status", "active")
     .maybeSingle();
 
-  if (schoolErr || !school) {
-    notFound();
-  }
+  if (!school) notFound();
 
+  /* ── Always fetch batches + sections (needed for Step 1 even if not logged in) ── */
+  const [{ data: batchRows }, { data: sectionRows }] = await Promise.all([
+    supabase
+      .from("batches")
+      .select("id, name, graduation_year")
+      .eq("school_id", school.id)
+      .order("graduation_year", { ascending: false }),
+    supabase
+      .from("sections")
+      .select("id, name, batch_id")
+      .eq("school_id", school.id)
+      .order("name"),
+  ]);
+
+  const batches = (batchRows ?? []) as {
+    id: string;
+    name: string;
+    graduation_year: number | null;
+  }[];
+  const sections = (sectionRows ?? []) as {
+    id: string;
+    name: string;
+    batch_id: string;
+  }[];
+
+  /* ── Auth ── */
   const user = await getAuthUser(supabase);
-  const nextPath = getSafeNextPath(`/s/${schoolSlug}/join`);
 
-  let batches: BatchOption[] = [];
-  let sections: SectionOption[] = [];
-  let existingProfile: AlumniProfileRow | null = null;
+  /* ── Determine batch / section labels for display ── */
+  const selectedBatch = batchId ? batches.find((b) => b.id === batchId) : null;
+  const selectedSection = sectionId ? sections.find((s) => s.id === sectionId) : null;
+  const batchLabel = selectedBatch
+    ? `${selectedBatch.name}${selectedBatch.graduation_year != null ? ` (${selectedBatch.graduation_year})` : ""}`
+    : "";
+
+  /* ── If logged in, fetch existing profile ── */
+  let existingProfile: {
+    id: string;
+    status: string;
+    batch_id: string;
+    section_id: string | null;
+  } | null = null;
   let suggestedDisplayName = "";
 
   if (user) {
-    const [
-      { data: batchRows },
-      { data: sectionRows },
-      { data: profileRow },
-      { data: userRow },
-    ] = await Promise.all([
-      supabase
-        .from("batches")
-        .select("id, name, graduation_year")
-        .eq("school_id", school.id)
-        .order("graduation_year", { ascending: false }),
-      supabase
-        .from("sections")
-        .select("id, name, batch_id")
-        .eq("school_id", school.id)
-        .order("name"),
+    const [{ data: profileRow }, { data: userRow }] = await Promise.all([
       supabase
         .from("alumni_profiles")
-        .select("*")
+        .select("id, status, batch_id, section_id")
         .eq("user_id", user.id)
         .eq("school_id", school.id)
         .maybeSingle(),
@@ -95,15 +105,33 @@ export default async function SchoolJoinPage({
         .maybeSingle(),
     ]);
 
-    batches = (batchRows ?? []) as BatchOption[];
-    sections = (sectionRows ?? []) as SectionOption[];
-    existingProfile = profileRow as AlumniProfileRow | null;
+    existingProfile = (profileRow ?? null) as {
+      id: string;
+      status: string;
+      batch_id: string;
+      section_id: string | null;
+    } | null;
     suggestedDisplayName =
       userRow?.full_name?.trim() ||
       (typeof user.user_metadata?.full_name === "string"
         ? user.user_metadata.full_name
         : "");
   }
+
+  /* ── Decide which step to show ── */
+  //
+  // STEP 1 — no batch selected yet
+  // STEP 2 — batch selected but user not logged in (show auth options)
+  // STEP 3 — batch selected + user logged in (profile completion)
+  //
+  const showStep1 = !batchId;
+  const showStep2 = Boolean(batchId) && !user;
+  const showStep3 = Boolean(batchId) && Boolean(user);
+
+  /* The next-path for auth redirects must carry the batch/section params so
+     the user lands back here with their selection intact. */
+  const joinHref = `/s/${schoolSlug}/join${batchId ? `?batchId=${batchId}${sectionId ? `&sectionId=${sectionId}` : ""}` : ""}`;
+  const encodedNext = encodeURIComponent(joinHref);
 
   return (
     <div data-auth-chrome className="flex min-h-screen w-full">
@@ -113,7 +141,7 @@ export default async function SchoolJoinPage({
         className="hidden w-[44%] max-w-[520px] lg:flex"
       />
 
-      {/* Right side */}
+      {/* Right: content area */}
       <div className="flex flex-1 flex-col bg-stone-50 dark:bg-stone-950">
         {/* Mobile brand strip */}
         <div className="flex items-center gap-3 bg-gradient-to-r from-violet-700 via-fuchsia-600 to-pink-500 px-5 py-4 lg:hidden">
@@ -125,82 +153,121 @@ export default async function SchoolJoinPage({
           </span>
         </div>
 
-        {/* Scrollable form area */}
+        {/* Scrollable content */}
         <div className="flex flex-1 items-start justify-center overflow-y-auto px-4 py-10 sm:px-6">
-          {!user ? (
-            /* ── Not signed in ── */
-            <AuthCard
-              title="Start your alumni profile 🎓"
-              description={`Sign in or create an account to join the ${school.name} community.`}
-            >
-              <div className="space-y-4">
-                <Link
-                  href={
-                    nextPath
-                      ? `/register?next=${encodeURIComponent(nextPath)}`
-                      : "/register"
-                  }
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-violet-500/25 transition-all duration-150 hover:from-violet-700 hover:to-fuchsia-600 hover:shadow-lg hover:shadow-violet-500/30 active:scale-[0.98]"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Create account
-                </Link>
+          {/* ── STEP 1: Batch & Section picker ── */}
+          {showStep1 && (
+            <JoinBatchPicker
+              schoolSlug={school.slug}
+              schoolName={school.name}
+              batches={batches}
+              sections={sections}
+            />
+          )}
 
-                <Link
-                  href={
-                    nextPath
-                      ? `/login?next=${encodeURIComponent(nextPath)}`
-                      : "/login"
-                  }
-                  className="flex w-full items-center justify-center rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 shadow-sm transition-all duration-150 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 active:scale-[0.98] dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200"
-                >
-                  Sign in
-                </Link>
-
-                <p className="text-center text-xs leading-relaxed text-stone-400 dark:text-stone-500">
-                  Your profile will be reviewed by the school&apos;s admin
-                  before it appears in the alumni directory.
+          {/* ── STEP 2: Auth (not logged in, batch selected) ── */}
+          {showStep2 && (
+            <div className="w-full max-w-sm space-y-6">
+              {/* Header */}
+              <div className="text-center">
+                <h2 className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
+                  Create or sign in
+                </h2>
+                <p className="mt-1.5 text-sm text-stone-500 dark:text-stone-400">
+                  One last step — set up your account to finish joining.
                 </p>
+              </div>
 
-                <div className="border-t border-stone-100 pt-3 dark:border-stone-800">
+              {/* Step indicator */}
+              <div className="flex items-center justify-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-200 text-xs font-bold text-violet-700 dark:bg-violet-900/50 dark:text-violet-400">
+                  ✓
+                </span>
+                <span className="h-px w-8 bg-violet-200 dark:bg-violet-800" />
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
+                  2
+                </span>
+                <span className="h-px w-8 bg-stone-200 dark:bg-stone-700" />
+                <span className="flex h-6 w-6 items-center justify-center rounded-full border border-stone-200 text-xs font-medium text-stone-400 dark:border-stone-700">
+                  3
+                </span>
+              </div>
+
+              {/* Batch summary pill */}
+              {selectedBatch && (
+                <div className="flex items-center justify-between rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3 dark:border-violet-900/40 dark:bg-violet-950/20">
+                  <div className="flex items-center gap-2 text-sm">
+                    <GraduationCap className="h-4 w-4 shrink-0 text-violet-500" />
+                    <span className="font-semibold text-violet-900 dark:text-violet-200">
+                      {batchLabel}
+                      {selectedSection && (
+                        <span className="ml-2 font-normal text-violet-600 dark:text-violet-300">
+                          · {selectedSection.name}
+                        </span>
+                      )}
+                    </span>
+                  </div>
                   <Link
-                    href="/"
-                    className="flex items-center justify-center gap-1.5 text-sm font-medium text-stone-400 transition-colors hover:text-violet-600 dark:text-stone-500 dark:hover:text-violet-400"
+                    href={`/s/${schoolSlug}/join`}
+                    className="shrink-0 text-xs font-medium text-violet-500 underline-offset-4 hover:underline"
                   >
-                    ← Back home
+                    Change
                   </Link>
                 </div>
+              )}
+
+              {/* Auth card */}
+              <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-stone-800 dark:bg-stone-950">
+                <div className="space-y-3 px-5 py-6">
+                  <Link
+                    href={`/register?next=${encodedNext}`}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-violet-700 hover:to-fuchsia-600 hover:shadow-md hover:shadow-violet-500/25 active:scale-[0.98]"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Create account
+                  </Link>
+                  <Link
+                    href={`/login?next=${encodedNext}`}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-700 shadow-sm transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 active:scale-[0.98] dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200"
+                  >
+                    <LogIn className="h-4 w-4" />
+                    Sign in
+                  </Link>
+                </div>
+                <div className="border-t border-stone-100 bg-stone-50/60 px-5 py-3 dark:border-stone-800 dark:bg-stone-900/40">
+                  <p className="text-center text-xs text-stone-400 dark:text-stone-500">
+                    Your profile will be reviewed by the school admin before
+                    appearing in the alumni directory.
+                  </p>
+                </div>
               </div>
-            </AuthCard>
-          ) : (
-            /* ── Signed in: show alumni profile form ── */
-            <div className="w-full max-w-lg pb-10">
-              <AlumniProfileForm
-                key={existingProfile?.id ?? "new"}
-                school={{
-                  id: school.id,
-                  name: school.name,
-                  slug: school.slug,
-                  visibility: school.visibility,
-                  primary_color: school.primary_color,
-                  cover_photo_url: school.cover_photo_url,
-                }}
-                batches={batches}
-                sections={sections}
-                existingProfile={existingProfile}
-                joinSlug={school.slug}
-                suggestedDisplayName={suggestedDisplayName}
-                prefillBatchId={prefillBatchId}
-              />
-              <div className="mt-6 text-center">
+
+              {/* Back link */}
+              <div className="text-center">
                 <Link
-                  href="/"
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-500 shadow-sm transition-all hover:border-violet-200 hover:bg-violet-50 hover:text-violet-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400 dark:hover:text-violet-400"
+                  href={`/s/${schoolSlug}/join`}
+                  className="inline-flex items-center gap-1.5 text-sm text-stone-400 hover:text-violet-600 dark:text-stone-500 dark:hover:text-violet-400"
                 >
-                  ← Back home
+                  ← Back to batch selection
                 </Link>
               </div>
             </div>
+          )}
+
+          {/* ── STEP 3: Profile completion (logged in + batch selected) ── */}
+          {showStep3 && (
+            <JoinProfileForm
+              schoolId={school.id}
+              schoolName={school.name}
+              schoolSlug={school.slug}
+              batchId={batchId!}
+              batchLabel={batchLabel}
+              sectionId={sectionId}
+              sectionLabel={selectedSection?.name ?? null}
+              existingProfileId={existingProfile?.id ?? null}
+              suggestedDisplayName={suggestedDisplayName}
+              currentStatus={existingProfile?.status ?? null}
+            />
           )}
         </div>
       </div>
